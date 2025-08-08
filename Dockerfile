@@ -1,4 +1,4 @@
-FROM php:7-fpm-buster
+FROM php:8.1-fpm-bookworm
 
 #COPY ./ /app/
 
