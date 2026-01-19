@@ -1,66 +1,50 @@
-version: "3.4"
-networks:
-  sqstorage:
-    name: sqstorage
-
 services:
-  php:
-    image: sqstorage:master
-    build: .
+  db:
+    image: mariadb:11
+    environment:
+      MYSQL_TCP_PORT: ${DB_PORT}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_USER_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
-      - www-app:/app:rw
-    working_dir: /app
-    entrypoint: ["php-fpm", "-F"]
-    env_file:
-      - .env
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - net
+
+  app:
+    build: .
     depends_on:
       db:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "php", "--version"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - sqstorage
-
-  db:
-    image: mariadb:latest
-    hostname: ${DB_HOST}
-    env_file:
-      - .env
-    environment:
-      - MARIADB_RANDOM_ROOT_PASSWORD=1
-    healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
-      start_period: 5s
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - sqstorage
-    volumes:
-      - db-data:/var/lib/mysql:rw
-
-  web:
-    build:
-      context: .
-      dockerfile: nginx.Dockerfile
     ports:
-      - "1337:80"
+      - "8080:80"
     volumes:
-      - www-app:/app:rw
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
-      interval: 1m30s
-      timeout: 10s
-      retries: 3
-    depends_on:
-      - php
+      - support_data:/var/www/html/support
+      - locale_data:/var/www/html/languages/locale
+      - smarty_data:/var/www/html/smartyfolders
+    environment:
+      SQ_DB_HOST: ${DB_HOST}
+      SQ_DB_PORT: ${DB_PORT}
+      SQ_DB_NAME: ${DB_NAME}
+      SQ_DB_USER: ${DB_USER}
+      SQ_DB_PASS: ${DB_USER_PASSWORD}
+      SQ_USE_REGISTRATION: ${SQ_USE_REGISTRATION}
+      SQ_USE_PRETTY_URLS: ${SQ_USE_PRETTY_URLS}
+
     networks:
-      - sqstorage
+      - net
 
 volumes:
-  www-app:
-  db-data:
+  db_data:
+  support_data:
+  locale_data:
+  smarty_data:
+
+networks:
+  net:

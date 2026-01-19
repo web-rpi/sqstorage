@@ -43,10 +43,10 @@ Follow these steps to install sqStorage on your system with docker.
 ## Accessing sqStorage
 Once sqStorage is running, you can access it in your browser at the following address:
 ```
-http://<your-ip-address>:1337
+http://<your-ip-address>:8080/install.php
 ```
 
-After accessing this URL, you will be asked to enter the access data for the database so that sqStorage can establish a connection to the database. It is important that the "Database-Server" is set to the "docker-container-hostname" of the sqStorage-DB-server. Usually, this is "sqstorage-db-1".
+After opening the URL, you will be prompted to initialize the database.
 
 
 ## Done!

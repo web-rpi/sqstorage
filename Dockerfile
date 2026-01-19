@@ -1,29 +1,30 @@
-# FROM php:fpm-alpine
-#109
-FROM php:8.4-fpm-alpine
+FROM php:8.3-apache
 
-COPY ./*.php /app/
-COPY ./favicon.* /app/
-COPY ./.htaccess /app/
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config \
+    libsqlite3-dev \
+    zlib1g-dev \
+    libicu-dev \
+    libjpeg62-turbo-dev \
+    libpng-dev \
+    libfreetype6-dev \
+    gettext \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY ./css /app/css
-COPY ./fonts /app/fonts
-COPY ./img /app/img
-COPY ./js /app/js
-COPY ./languages /app/languages
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+ && docker-php-ext-install -j"$(nproc)" \
+    mysqli intl gettext gd pdo pdo_mysql
 
-COPY ./smartyfolders /app/smartyfolders
 
-COPY ./support /app/support
-# COPY docker specific dba.php
-COPY ./support/dba-docker.php /app/support/dba.php
-COPY ./templates /app/templates
-COPY ./vendor /app/vendor
-COPY ./welcome_lang /app/welcome_lang
+RUN a2enmod rewrite headers \
+    && sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
-RUN chown www-data:www-data -R /app/
+WORKDIR /var/www/html
+COPY . /var/www/html
+COPY docker/templates/dba.php.tpl /opt/templates/dba.php.tpl
 
-VOLUME /app
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-RUN ( curl -sSLf https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions -o - || echo 'return 1' ) | sh -s \
-    mysqli gettext gd intl pdo_mysql
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["apache2-foreground"]
