@@ -1,0 +1,113 @@
+services:
+  app:
+    image: sqstorage:local
+    build:
+      context: ../
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${SQSTORAGE_HTTP_PORT}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "php -m | grep -q mysqli"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - sqstorage
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    env_file:
+      - .env
+    command:
+      - --transaction-isolation=READ-COMMITTED
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --innodb-flush-method=fsync
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - sqstorage_db:/var/lib/mysql
+      - ../../support/initdb.sql:/docker-entrypoint-initdb.d/00-sqstorage-init.sql:ro
+    networks:
+      - sqstorage
+
+  db_admin_setup:
+    image: mariadb:11.4
+    restart: "no"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        mariadb -h"${DB_HOST}" -P"${DB_PORT}" -uroot -p"${MARIADB_ROOT_PASSWORD}" <<SQL
+        CREATE USER IF NOT EXISTS '${PMA_ADMIN_USER}'@'%' IDENTIFIED BY '${PMA_ADMIN_PASSWORD}';
+        ALTER USER '${PMA_ADMIN_USER}'@'%' IDENTIFIED BY '${PMA_ADMIN_PASSWORD}';
+        GRANT ALL PRIVILEGES ON *.* TO '${PMA_ADMIN_USER}'@'%' WITH GRANT OPTION;
+        FLUSH PRIVILEGES;
+        SQL
+    networks:
+      - sqstorage
+
+  phpmyadmin:
+    image: phpmyadmin:5.2-apache
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${PHPMYADMIN_HTTP_PORT}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+      db_admin_setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "php -v >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - sqstorage
+
+  backup:
+    build:
+      context: ../
+      dockerfile: deploy/backup/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      db_admin_setup:
+        condition: service_completed_successfully
+    volumes:
+      - ${BACKUP_HOST_DIR}:/backups
+      - ./.env:/config/.env:ro
+      - ./stack.yml:/config/stack.yml:ro
+    networks:
+      - sqstorage
+
+networks:
+  sqstorage:
+    name: ${COMPOSE_PROJECT_NAME}
+
+volumes:
+  sqstorage_db:
+    name: ${COMPOSE_PROJECT_NAME}_db
